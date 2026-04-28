@@ -1,6 +1,6 @@
-# Chinchón Java Core 🃏
+# Chinchón
 
-Una implementación robusta, modular y extensible del clásico juego de cartas **Chinchón**, desarrollada íntegramente en Java. Este proyecto demuestra la aplicación de principios de ingeniería de software, patrones de diseño y una arquitectura orientada a objetos limpia.
+Una implementación robusta, modular y extensible del clásico juego de cartas **Chinchón**, desarrollada íntegramente en Java. Este proyecto demuestra la aplicación de principios de ingeniería de software, patrones de diseño y una arquitectura orientada a objetos limpia, basado en el temario estudia durante el curso de programación de primero de DAM.
 
 ## Características Principales
 
