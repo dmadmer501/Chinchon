@@ -4,74 +4,42 @@ import models.*;
 import java.util.*;
 
 /**
- * Gestiona el mazo, la pila de descartes, los turnos de los jugadores y el recuento de puntos.
+ * Motor del juego corregido para evitar bugs de descarte duplicado y cierres inválidos.
  */
 public class GameManager {
-   
-    /** Configuración actual de la partida (puntos, barajas, jugadores). */
+
     private GameConfig config;
-   
-    /** Lista que representa el mazo de cartas para robar. */
     private final List<Card> deck = new ArrayList<>();
-   
-    /** Lista que representa el montón de cartas descartadas. */
     private final List<Card> discardPile = new ArrayList<>();
-   
-    /** Analizador lógico para validar combinaciones y cierres. */
     private final HandAnalyzer analyzer = new HandAnalyzer();
-   
-    /** Estado que indica si la partida completa ha finalizado. */
     private boolean gameEnded = false;
-   
-    /** Contador de turnos transcurridos en la ronda actual. */
     private int currentRoundTurn = 1;
 
-    /**
-     * Constructor privado para evitar instanciación externa (Patrón Singleton).
-     */
     private GameManager() {}
 
-    /**
-     * Clase interna estática para la inicialización segura del Singleton (Bill Pugh Singleton).
-     */
     private static class Holder {
         private static final GameManager INSTANCE = new GameManager();
     }
 
-    /**
-     * Obtiene la instancia única del administrador del juego.
-     * @return Instancia de GameManager.
-     */
     public static GameManager getInstance() {
         return Holder.INSTANCE;
     }
 
-    /**
-     * Proporciona acceso al analizador de combinaciones de la partida.
-     * @return El objeto HandAnalyzer configurado.
-     */
     public HandAnalyzer getAnalyzer() {
         return this.analyzer;
     }
 
-    /**
-     * Inicializa el juego con una configuración específica y prepara la primera ronda.
-     * @param config Objeto GameConfig con los parámetros de la partida.
-     */
     public void init(GameConfig config) {
         this.config = config;
         this.gameEnded = false;
         prepareRound();
     }
 
-    /**
-     * Prepara una nueva ronda: limpia el mazo, baraja, reparte cartas y establece el primer descarte.
-     */
     private void prepareRound() {
         deck.clear();
         discardPile.clear();
         currentRoundTurn = 1;
-        
+
         int d = 0;
         while (d < config.getDeckCount()) {
             for (Suit s : Suit.values()) {
@@ -95,9 +63,6 @@ public class GameManager {
         discardPile.add(drawFromDeck());
     }
 
-    /**
-     * Inicia el ciclo principal de la partida hasta que se cumpla la condición de fin.
-     */
     public void run() {
         while (!gameEnded) {
             playRound();
@@ -105,9 +70,6 @@ public class GameManager {
         announceFinalWinner();
     }
 
-    /**
-     * Controla el ciclo de turnos de una ronda individual hasta que un jugador cierra.
-     */
     private void playRound() {
         boolean roundActive = true;
         int playerIndex = 0;
@@ -118,8 +80,8 @@ public class GameManager {
             boolean closed = executeTurn(p);
 
             if (closed) {
-                roundActive = false; 
-                processEndRound(p);  
+                roundActive = false;
+                processEndRound(p);
             } else {
                 playerIndex = (playerIndex + 1) % players.size();
                 currentRoundTurn++;
@@ -128,51 +90,50 @@ public class GameManager {
     }
 
     /**
-     * Ejecuta las fases del turno de un jugador: robo, verificación de cierre y descarte.
-     * @param p El jugador que posee el turno actual.
-     * @return true si el jugador ha cerrado la ronda con éxito, false en caso contrario.
+     * CORREGIDO: Estructura de fase de descarte controlada.
      */
     private boolean executeTurn(Player p) {
         Card top = discardPile.get(discardPile.size() - 1);
         Card drawn;
         if (p.chooseDrawSource(top)) {
             drawn = drawFromDeck();
-            System.out.println("\n-> Carta cogida del mazo: " + drawn.toString());
+            System.out.println("\n-> " + p.getName() + " coge del mazo.");
         } else {
             drawn = discardPile.remove(discardPile.size() - 1);
-            System.out.println("\n-> Carta cogida del descarte: " + drawn.toString());
+            System.out.println("\n-> " + p.getName() + " coge del descarte: " + drawn.toString());
         }
         p.addCard(drawn);
 
-        boolean canPhysicallyClose = currentRoundTurn > config.getPlayers().size() 
-                                     && p.getTotalPoints() < config.getMaxPoints() 
-                                     && canCloseAfterDiscard(p.getHand());
+        // Comprobamos si cumple las condiciones del juego para poder cerrar
+        boolean canPhysicallyClose = currentRoundTurn > config.getPlayers().size()
+                && p.getTotalPoints() < config.getMaxPoints()
+                && canCloseAfterDiscard(p.getHand());
 
         boolean closeSuccess = false;
-        
+
+        // Si puede y el jugador (Humano o IA) quiere cerrar
         if (canPhysicallyClose && p.wantsToClose()) {
-            Card discarded = p.discard(); 
+            // El jugador elige su descarte para cerrar
+            Card discarded = p.discard();
             if (analyzer.canClose(p.getHand())) {
                 closeSuccess = true;
                 discardPile.add(discarded);
                 System.out.println("\n*** " + p.getName().toUpperCase() + " HA CERRADO LA RONDA ***");
             } else {
-                System.out.println("Cierre inválido: El descarte elegido no permite cerrar.");
-                p.addCard(discarded);
+                System.out.println("Cierre inválido: Ese descarte no te permite cerrar. Turno ordinario continuo.");
+                // Devolvemos la carta para que la mano siga teniendo 8 antes del descarte normal
+                p.getHand().add(discarded);
+                // Forzamos un descarte normal sin cerrar
                 discardPile.add(p.discard());
             }
         } else {
+            // Turno normal: Descarte ordinario sin cerrar
             discardPile.add(p.discard());
         }
 
         return closeSuccess;
     }
 
-    /**
-     * Simula el descarte de cada una de las 8 cartas disponibles para determinar si es posible cerrar.
-     * @param hand8 Lista de 8 cartas tras el robo.
-     * @return true si al menos un descarte posible resulta en una mano válida para cerrar.
-     */
     private boolean canCloseAfterDiscard(List<Card> hand8) {
         boolean possible = false;
         int i = 0;
@@ -187,20 +148,16 @@ public class GameManager {
         return possible;
     }
 
-    /**
-     * Procesa el final de una ronda: calcula puntos, aplica bonificaciones y verifica si alguien superó el límite.
-     * @param winner El jugador que ha provocado el cierre de la ronda.
-     */
     private void processEndRound(Player winner) {
         System.out.println("\n--- RECUENTO DE PUNTOS ---");
-        
+
         if (analyzer.isChinchon(winner.getHand())) {
             System.out.println("¡CHINCHÓN! " + winner.getName() + " gana la partida automáticamente.");
             gameEnded = true;
         } else {
             if (analyzer.findUnmatchedCards(winner.getHand()).isEmpty()) {
                 winner.addPoints(-10);
-                System.out.println(winner.getName() + " recibe -10 puntos de bonificación.");
+                System.out.println(winner.getName() + " recibe -10 puntos de bonificación por cerrar con 0 puntos sueltos.");
             }
 
             boolean thresholdReached = false;
@@ -215,7 +172,7 @@ public class GameManager {
                 } else {
                     System.out.println(p.getName() + " (Cerró) mantiene sus puntos: " + p.getTotalPoints());
                 }
-                
+
                 if (p.getTotalPoints() >= config.getMaxPoints()) {
                     thresholdReached = true;
                 }
@@ -231,10 +188,6 @@ public class GameManager {
         }
     }
 
-    /**
-     * Extrae una carta del mazo. Si el mazo está vacío, recicla la pila de descartes.
-     * @return La carta extraída del mazo.
-     */
     private Card drawFromDeck() {
         if (deck.isEmpty()) {
             System.out.println("! Mazo vacío. Barajando pila de descartes...");
@@ -247,14 +200,11 @@ public class GameManager {
         return deck.remove(deck.size() - 1);
     }
 
-    /**
-     * Compara las puntuaciones de todos los jugadores y anuncia al ganador final (menor puntuación).
-     */
     private void announceFinalWinner() {
         System.out.println("\n========================================");
         System.out.println("         FIN DE LA PARTIDA              ");
         System.out.println("========================================");
-        
+
         List<Player> players = config.getPlayers();
         Player winner = players.get(0);
         int i = 1;

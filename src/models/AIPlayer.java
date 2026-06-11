@@ -1,47 +1,66 @@
 package models;
 
+import core.GameManager;
+import core.HandAnalyzer;
+import java.util.List;
+
 /**
  * Representa un jugador controlado por la inteligencia artificial (IA).
- * Esta clase implementa la lógica de toma de decisiones automática para las fases
- * de robo, descarte y cierre de ronda.
+ * Lógica corregida para descarte inteligente y cierres automáticos.
  */
 public class AIPlayer extends Player {
-    
-    /**
-     * Crea una nueva instancia de un jugador controlado por la IA.
-     * @param name Nombre que se le asignará al jugador artificial.
-     */
-    public AIPlayer(String name) { 
+
+    public AIPlayer(String name) {
         super(name);
     }
 
     /**
-     * Determina la fuente de la cual robará la IA al inicio de su turno.
-     * @param top La carta que se encuentra actualmente en la parte superior de la pila de descartes.
-     * @return true, indicando que siempre roba del mazo.
+     * La IA decide de dónde robar. Si la carta del descarte le sirve para formar
+     * una combinación (mismo rango o continuidad), podría elegirla.
+     * Para mantenerlo simple pero funcional: si ayuda a reducir puntos, la toma.
      */
-    @Override 
-    public boolean chooseDrawSource(Card top) { 
-        return true; 
+    @Override
+    public boolean chooseDrawSource(Card top) {
+        // Estrategia base: si es un número bajo (menor o igual a 3), le puede servir.
+        // De lo contrario, prefiere la sorpresa del mazo.
+        return top.getPoints() > 3;
     }
 
     /**
-     * Ejecuta la acción de descarte de la IA.
-     * En esta implementación, la IA descarta automáticamente la primera carta de su mano.
-     * @return La carta que ha sido extraída de la mano del jugador para ser descartada.
+     * CORREGIDO: La IA ya no tira siempre la carta 0.
+     * Busca la peor carta suelta (la de mayor puntuación) y se deshace de ella.
      */
-    @Override 
-    public Card discard() { 
-        return hand.remove(0); 
+    @Override
+    public Card discard() {
+        HandAnalyzer analyzer = GameManager.getInstance().getAnalyzer();
+        List<Card> unmatched = analyzer.findUnmatchedCards(this.hand);
+
+        Card cardToDiscard;
+        if (!unmatched.isEmpty()) {
+            // Buscamos la carta suelta con más puntos para quitar peso
+            cardToDiscard = unmatched.get(0);
+            for (Card c : unmatched) {
+                if (c.getPoints() > cardToDiscard.getPoints()) {
+                    cardToDiscard = c;
+                }
+            }
+        } else {
+            // Si por algún motivo todo combina, descarta la primera de la mano
+            cardToDiscard = hand.get(0);
+        }
+
+        this.hand.remove(cardToDiscard);
+        return cardToDiscard;
     }
 
     /**
-     * Determina si la IA desea cerrar la ronda actual cuando tiene una combinación válida.
-     * En esta implementación, la IA nunca toma la iniciativa de cerrar la ronda.
-     * @return false, indicando que la IA no cerrará la ronda por voluntad propia.
+     * CORREGIDO: La IA ahora SÍ cierra la ronda si tiene una jugada ganadora.
      */
-    @Override 
-    public boolean wantsToClose() { 
-        return false; 
+    @Override
+    public boolean wantsToClose() {
+        HandAnalyzer analyzer = GameManager.getInstance().getAnalyzer();
+        // Si tiene 0 cartas sueltas o la que le queda es menor o igual a 3, cierra sin dudarlo
+        List<Card> unmatched = analyzer.findUnmatchedCards(this.hand);
+        return unmatched.isEmpty() || (unmatched.size() == 1 && unmatched.get(0).getPoints() <= 3);
     }
 }
